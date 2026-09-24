@@ -4,8 +4,8 @@
 const WIN_Z = 0;  // default graphics window z coord in world space
 const WIN_LEFT = 0; const WIN_RIGHT = 1;  // default left and right x coords in world space
 const WIN_BOTTOM = 0; const WIN_TOP = 1;  // default top and bottom y coords in world space
-const INPUT_TRIANGLES_URL = "https://pages.github.ncsu.edu/cgclass/exercise5/triangles.json"; // triangles file loc
-const INPUT_ELLIPSOIDS_URL = "https://pages.github.ncsu.edu/cgclass/exercise5/ellipsoids.json"; // ellipsoids file loc
+const INPUT_TRIANGLES_URL = "triangles.json"; // triangles file loc: served next to this page
+const INPUT_ELLIPSOIDS_URL = "ellipsoids.json"; // ellipsoids file loc: served next to this page
 var Eye = new vec4.fromValues(0.5,0.5,-0.5,1.0); // default eye position in world space
 
 /* webgl globals */
@@ -120,17 +120,37 @@ function setupShaders() {
     
     // define fragment shader in essl using es6 template strings
     var fShaderCode = `
+        precision mediump float; // fragment shaders have no default float precision
+        varying vec3 modelPosition; // the untransformed vertex position, interpolated
+
         void main(void) {
-            gl_FragColor = vec4(1.0, 1.0, 1.0, 1.0); // all fragments are white
+            // colour the models instead of painting every fragment white: walk a cosine
+            // palette along the model diagonal, so the colour varies inside each model
+            float t = clamp((modelPosition.x + modelPosition.y - 0.3) / 0.9, 0.0, 1.0);
+            vec3 colour = 0.5 + 0.5*cos(6.2831853*(t + vec3(0.0, 0.33, 0.67))); // rgb out of phase
+            gl_FragColor = vec4(colour, 1.0);
         }
     `;
-    
+
     // define vertex shader in essl using es6 template strings
     var vShaderCode = `
         attribute vec3 vertexPosition;
+        varying vec3 modelPosition; // hand the untransformed position to the fragment shader
 
         void main(void) {
-            gl_Position = vec4(vertexPosition, 1.0); // use the untransformed position
+            modelPosition = vertexPosition; // the colour follows the model, not the screen
+
+            // move: the models live in [0,1]x[0,1], which is only the upper right quadrant
+            // of the canvas, so recentre that square on the origin and use the whole viewport
+            vec2 position = vertexPosition.xy * 2.0 - 1.0;
+
+            // reshape: squash in x, stretch in y, then rotate 20 degrees about the centre
+            position *= vec2(0.85, 1.15);
+            float angle = radians(20.0);
+            position = mat2(cos(angle), sin(angle), -sin(angle), cos(angle)) * position;
+            position += vec2(0.30, 0.08); // nudge the pair back into the middle of the canvas
+
+            gl_Position = vec4(position, vertexPosition.z, 1.0);
         }
     `;
     
